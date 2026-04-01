@@ -1114,8 +1114,40 @@ def swank_simple_completions(symbol):
     swank_rex(':simple-completions', cmd, 'nil', 't')
 
 def swank_fuzzy_completions(symbol):
-    cmd = '(swank:fuzzy-completions "' + symbol + '" ' + get_swank_package() + ' :limit 2000 :time-limit-in-msec 2000)'
-    swank_rex(':fuzzy-completions', cmd, 'nil', 't')
+    filetype = vim.eval('SlimvGetFiletype()')
+    fuzzy_cmd = '(swank:fuzzy-completions "' + symbol + '" ' + get_swank_package() + ' :limit 2000 :time-limit-in-msec 2000)'
+    if filetype == 'lisp':
+        cmd = '''
+          (cl:let* ((symbol-string "''' + symbol + '''")
+                    (completions ''' + fuzzy_cmd + ''')
+                    (completion-symbols (cl:first completions))
+                    (local-nicknames-to-pkgs (uiop:package-local-nicknames ''' + unquote(get_swank_package()) + '''))
+                    (local-nicknames-to-names (cl:loop :for (nickname . pkg) :in local-nicknames-to-pkgs
+                                                       :collect (cl:cons nickname (cl:list (cl:append (cl:list (cl:package-name pkg))
+                                                                                                      (cl:package-nicknames pkg)))))))
+                   (cl:when (cl:and local-nicknames-to-names completion-symbols (cl:position #\\: symbol-string))
+                            (cl:setf (cl:first completions)
+                                     (cl:loop :for candidate :in completion-symbols
+                                              :collect
+                                              (cl:let* ((candidate-symbol (cl:first candidate))
+                                                        (divider-idx (cl:position #\\: candidate-symbol))
+                                                        (pkg-part (cl:subseq candidate-symbol 0 divider-idx))
+                                                        (name-part (cl:subseq candidate-symbol (cl:1+ divider-idx)))) ; may include a leading : if candidate is like pkg::internal
+                                                       (cl:loop :for nickname-assocs :in local-nicknames-to-names
+                                                                :for nickname = (cl:first nickname-assocs)
+                                                                :for pkg-names = (cl:second nickname-assocs)
+                                                                :do
+                                                                (cl:loop :for global-pkg-name :in pkg-names
+                                                                         :do
+                                                                         (cl:when (cl:string-equal global-pkg-name pkg-part)
+                                                                                  (cl:setf (cl:first candidate) (uiop:strcat (cl:string-downcase nickname) ":" name-part)))))
+                                                       candidate))))
+                   completions)
+        '''
+    else:
+        cmd = fuzzy_cmd
+
+    swank_rex(':fuzzy-completions', cmd, 'nil', 't') # running with 'nil' as the package here requires the use of cl: prefixes above as swank-io-package does not :use cl.
 
 def swank_undefine_function(fn):
     cmd = '(swank:undefine-function "' + fn + '")'
