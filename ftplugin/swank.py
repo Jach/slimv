@@ -1121,7 +1121,8 @@ def swank_fuzzy_completions(symbol):
           (cl:let* ((symbol-string "''' + symbol + '''")
                     (completions ''' + fuzzy_cmd + ''')
                     (completion-symbols (cl:first completions))
-                    (local-nicknames-to-pkgs (uiop:package-local-nicknames ''' + unquote(get_swank_package()) + '''))
+                    (current-pkg (swank::guess-package ''' + get_swank_package() + '''))
+                    (local-nicknames-to-pkgs (cl:and current-pkg (uiop:package-local-nicknames current-pkg)))
                     (local-nicknames-to-names (cl:loop :for (nickname . pkg) :in local-nicknames-to-pkgs
                                                        :collect (cl:cons nickname (cl:list (cl:append (cl:list (cl:package-name pkg))
                                                                                                       (cl:package-nicknames pkg)))))))
